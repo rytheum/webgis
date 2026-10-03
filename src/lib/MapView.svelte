@@ -16,15 +16,17 @@
   let appliedBasemap = basemap;
   let popup;
   let layerMode = 'none';
+  export let layerVisible = true;
 
   const SOURCE_ID = 'suppliers';
   const LAYER_ID = 'suppliers-circles';
 
   const circlePaint = {
-    'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 3, 12, 6, 16, 9],
-    'circle-color': '#0f6f4a',
-    'circle-stroke-width': 1,
-    'circle-stroke-color': '#ffffff'
+    'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 3, 12, 7, 16, 10],
+    'circle-color': '#10b981',
+    'circle-stroke-width': 1.5,
+    'circle-stroke-color': 'rgba(255,255,255,0.7)',
+    'circle-opacity': ['interpolate', ['linear'], ['zoom'], 6, 0.7, 12, 0.9],
   };
 
   function escapeHtml(value) {
@@ -34,18 +36,62 @@
       .replaceAll('>', '&gt;');
   }
 
+  function formatCoord(num) {
+    return Number(num).toFixed(5);
+  }
+
   function onSupplierClick(event) {
-    const props = event.features?.[0]?.properties;
+    const feat = event.features?.[0];
+    const props = feat?.properties;
     if (!props) return;
+
     const area = props.plotareaha ?? '—';
+    const name = escapeHtml(props.entityname);
+    const region = escapeHtml(props.regionlabel);
+    const country = escapeHtml(props.countryname);
+    const lng = formatCoord(event.lngLat.lng);
+    const lat = formatCoord(event.lngLat.lat);
+
+    const html = `
+      <div class="popup-header">
+        <div class="popup-header-icon">🌿</div>
+        <div class="popup-header-text">
+          <span class="popup-header-label">Supplier</span>
+          <span class="popup-header-name" title="${name}">${name}</span>
+        </div>
+      </div>
+      <div class="popup-body">
+        <div class="popup-row">
+          <div class="popup-row-icon">📐</div>
+          <div class="popup-row-content">
+            <span class="popup-row-label">Plot Area</span>
+            <span class="popup-row-value">${escapeHtml(area)} ha</span>
+          </div>
+        </div>
+        <div class="popup-row">
+          <div class="popup-row-icon">📍</div>
+          <div class="popup-row-content">
+            <span class="popup-row-label">Region</span>
+            <span class="popup-row-value">${region}</span>
+          </div>
+        </div>
+        <div class="popup-row">
+          <div class="popup-row-icon">🌍</div>
+          <div class="popup-row-content">
+            <span class="popup-row-label">Country</span>
+            <span class="popup-row-value">${country}</span>
+          </div>
+        </div>
+      </div>
+      <div class="popup-footer">
+        <span class="popup-coord-icon">📌</span>
+        <span class="popup-coord">${lng}, ${lat}</span>
+      </div>
+    `;
+
     popup
       .setLngLat(event.lngLat)
-      .setHTML(
-        `<strong>${escapeHtml(props.entityname)}</strong><br>` +
-          `FID ${escapeHtml(props.FID)}<br>` +
-          `Plot ${escapeHtml(area)} ha<br>` +
-          `${escapeHtml(props.regionlabel)}`
-      )
+      .setHTML(html)
       .addTo(map);
   }
 
@@ -90,7 +136,10 @@
       type: 'circle',
       source: SOURCE_ID,
       'source-layer': MVT_SOURCE_LAYER,
-      paint: circlePaint
+      paint: circlePaint,
+      layout: {
+        visibility: layerVisible ? 'visible' : 'none'
+      }
     });
     bindClicks();
   }
@@ -100,8 +149,19 @@
     applyLayer();
   }
 
+  export function toggleLayer(visible) {
+    layerVisible = visible;
+    if (!map || !map.getStyle()) return;
+    if (map.getLayer(LAYER_ID)) {
+      map.setLayoutProperty(LAYER_ID, 'visibility', visible ? 'visible' : 'none');
+    }
+    if (!visible) {
+      popup?.remove();
+    }
+  }
+
   onMount(() => {
-    popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
+    popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: '300px' });
     map = new maplibregl.Map({
       container,
       style: basemaps[basemap],
@@ -109,6 +169,7 @@
       zoom: MAP_ZOOM
     });
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
+    map.addControl(new maplibregl.ScaleControl({ maxWidth: 150 }), 'bottom-left');
     map.on('style.load', applyLayer);
   });
 
